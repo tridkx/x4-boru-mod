@@ -58,7 +58,10 @@ MATERIALS = {
              'in the source game)'),
     'eyes': dict(
         diffuse='T_Common_Eyes_01_D.png',
-        shader='p1_character', blendmode='NONE', alpha=False, smooth=0.85,
+        # `p1_eye_ball` is what every eyeball material in the vanilla library
+        # uses (`p1_char_ter_eye_dark_01`, `p1_char_arg_m_eyeball_cau_01`, ...);
+        # `p1_character` is the skin shader and renders the iris flat and dark.
+        shader='p1_eye_ball', blendmode='NONE', alpha=False, smooth=0.60,
         note='shared eye texture'),
     'hair': dict(
         diffuse='T_Hair_D.png', normal='T_Hair_N.png',

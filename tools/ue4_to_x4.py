@@ -36,6 +36,7 @@ moved onto `Bip01 Head` and the geometry rides the head transform
 projects settled on.
 """
 
+import os
 import re
 
 import numpy as np
@@ -153,6 +154,14 @@ HEAD_BONE = 'Bip01 Head'
 #: into the deck.
 NO_ROTATE_BONES = {'Bip01 L Foot', 'Bip01 R Foot', 'Bip01 L Toe0', 'Bip01 R Toe0'}
 
+#: Leg bones whose sideways placement is pulled towards the source rig; see
+#: `Ue4Adapter.adjust_target`.
+LEG_BONES = {'Bip01 L Thigh', 'Bip01 R Thigh', 'Bip01 L Calf', 'Bip01 R Calf',
+             'Bip01 L Foot', 'Bip01 R Foot', 'Bip01 L Toe0', 'Bip01 R Toe0'}
+
+#: 0 = vanilla X4 stance width, 1 = the source's own (legs together).
+LEG_PULL = float(os.environ.get('BORU_LEG_PULL', '0.25'))
+
 #: Fold the fingers onto the palm.  The source hand is authored in a T-pose
 #: with the fingers straight and slightly spread; matching each finger to its
 #: own X4 joint prises them apart (the web between them has no geometry of its
@@ -226,7 +235,35 @@ class Ue4Adapter:
         return side_of(name)
 
     def adjust_target(self, x4_bone, src_pos, dst_pos):
-        """Final say on where a target bone's translation lands."""
+        """Final say on where a target bone's translation lands.
+
+        The two rigs disagree about how far apart the legs are.  Measured in
+        the X4 frame:
+
+            bone      source      X4 Biped
+            Thigh       8.4 cm     11.6 cm
+            Calf        7.4        14.8
+            Foot        6.7        17.7
+            Toe0        7.9        21.5
+
+        The source stands with its legs together, the X4 Biped is built wide
+        (and its own trousers measure 39.8 cm across at the hip, so the rig is
+        not wrong -- it is simply a broader build).  Matching each leg bone to
+        its X4 target therefore splays the whole lower body: measured across
+        the same vertices, the model's legs end up 1.30x wider at the thigh
+        and 2.00x at the feet.  On a character whose source silhouette is
+        narrow that reads as "the thighs are a size bigger than the waist".
+
+        `LEG_PULL` walks the target back towards the source: 0 keeps vanilla
+        X4 width, 1 puts every leg bone exactly where the source had it.
+        The cost is that vertices then sit off the bone that drives them, and
+        the walk cycle swings them a little wider -- which is why this is a
+        knob and not a constant.
+        """
+        if x4_bone in LEG_BONES and LEG_PULL > 0.0:
+            out = np.array(dst_pos, float)
+            out[0] = dst_pos[0] + (src_pos[0] - dst_pos[0]) * LEG_PULL
+            return out
         return dst_pos
 
 

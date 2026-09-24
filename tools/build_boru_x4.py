@@ -99,6 +99,46 @@ HEAD_WEIGHT_CUT = 0.5
 #: vanilla's sneaker mesh bottoms out at -0.32 cm
 GROUND_Z = -0.5
 
+#: Radial widening of the torso (1.0 = leave the source proportions alone).
+#:
+#: The source is a slim build: her waist measures 32.8 cm across where the
+#: vanilla Argon female measures 34.8, and the two rigs put the legs at
+#: different widths, so after the transfer the lower body is as wide as
+#: vanilla's while the waist is narrower -- "the thighs are a size bigger than
+#: the waist".  Pulling the legs in (`LEG_PULL`) fixes the bottom half; this
+#: widens the top half to meet it.  The factor is graded by how much of a
+#: vertex rides the torso bones, so the shoulders and the sleeve seams blend
+#: instead of stepping.
+TORSO_SCALE = float(os.environ.get('BORU_TORSO', '1.08'))
+TORSO_BONES = ('Bip01 Pelvis', 'Bip01 Spine', 'Bip01 Spine1', 'Bip01 Spine2')
+#: above this nothing is widened, so the head, neck and arms keep their size
+TORSO_Z_MAX = 142.0
+
+#: Degrees to lift the head, about the `Bip01 Head` joint.
+#:
+#: The rigs disagree about where the head bone sits relative to the face.
+#: Measured as the angle of "head bone -> eyeball centre" off vertical:
+#:
+#:     source rig        46.8 deg      (eyeball 6.3 cm above the head bone)
+#:     this transfer     45.9 deg      -- the transfer preserved it, to 1 deg
+#:     vanilla X4        36.0 deg      (eyeball 10.25 cm above the head bone)
+#:
+#: So the geometry is right and still reads as "looking down": X4's head bone
+#: sits lower in the skull, and every animation is authored against that.  The
+#: fix is to rotate the head geometry until it matches the attitude the rest of
+#: the game's faces have -- which is also what puts the top of the skull back
+#: over the neck instead of in front of it.
+HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '5.7'))
+
+#: The source eye slots carry UVs outside [0, 1] -- slot 2 puts 96% of its
+#: wedges at u in [1, 7] (an atlas page index, most likely) and slot 3 sits at
+#: u in [0.26, 0.76], which on `T_Common_Eyes_01_D` is exactly the pupil, so
+#: the eyes render as two black dots.  Blender wraps and the offline renders
+#: look plausible; the engine does not, and it shows.  Each slot's UVs are
+#: therefore normalised to [0, 1] here, which maps the whole iris texture onto
+#: the eyeball -- what the texture was drawn for.
+EYE_SLOTS = (2, 3)
+
 #: Laplacian passes over the skin weights (0 = off).  Smoothing helps where a
 #: joint's neighbours are driven by bones whose fitted rotations differ a lot;
 #: it is applied to the skin only, never to the hair or the glasses, whose
@@ -277,6 +317,64 @@ def main():
         print('feet: %d vertices shifted %.2f cm; sole now at %.2f'
               % (int(mask.sum()), dz, V[mask][:, 2].min()))
 
+    # ---- widen the torso to meet the legs (see TORSO_SCALE) ---------------
+    if abs(TORSO_SCALE - 1.0) > 1e-6:
+        torso_w = np.array([sum(w for b, w in d.items() if b in TORSO_BONES)
+                            for d in weights_x4])
+        k = 1.0 + (TORSO_SCALE - 1.0) * np.clip(torso_w, 0.0, 1.0)
+        k = np.where(V[:, 2] < TORSO_Z_MAX, k, 1.0)
+        before = float(V[:, 0].max() - V[:, 0].min())
+        V[:, 0] *= k
+        V[:, 1] *= k
+        moved = int((np.abs(k - 1.0) > 1e-6).sum())
+        print('torso widened x%.3f: %d vertices (overall width %.1f -> %.1f cm)'
+              % (TORSO_SCALE, moved, before,
+                 V[:, 0].max() - V[:, 0].min()))
+
+    # ---- lift the head to the X4 head/eye attitude -----------------------
+    #
+    # The rotation pivots on the *base of the neck* and fades out with the
+    # head+neck weight, not on `Bip01 Head`.  Pivoting on the head bone and
+    # grading by the head weight alone leaves the neck turning through a
+    # 10-degree gradient over one joint's worth of geometry, which folds it --
+    # visible as a crease under the jaw.  A real head tips about the base of
+    # the neck, and so does this.
+    if abs(HEAD_TILT) > 0.01:
+        hw = np.clip(np.array([d.get('Bip01 Head', 0.0) + d.get('Bip01 Neck', 0.0)
+                               for d in weights_x4]), 0.0, 1.0)
+        s_ = hw * hw * (3.0 - 2.0 * hw)            # smoothstep, no hard seam
+        pivot = np.asarray(x4_bones['Bip01 Neck']['head'], float)
+        rel = V - pivot
+        th = np.radians(HEAD_TILT) * s_
+        c, sn = np.cos(th), np.sin(th)
+        V = np.column_stack([
+            pivot[0] + rel[:, 0],
+            pivot[1] + rel[:, 1] * c - rel[:, 2] * sn,
+            pivot[2] + rel[:, 1] * sn + rel[:, 2] * c])
+        print('head lifted %.1f deg about Bip01 Neck (%d vertices moved)'
+              % (HEAD_TILT, int((s_ > 1e-3).sum())))
+
+    # ---- eyeball UVs into [0, 1] (see EYE_SLOTS) -------------------------
+    eye_remap = {}
+    for slot in EYE_SLOTS:
+        pf = mesh.faces[mesh.face_mat == slot]
+        if not len(pf):
+            continue
+        uv = mesh.wedge_uv[np.unique(pf.ravel())]
+        lo = uv.min(0)
+        span = np.maximum(uv.max(0) - lo, 1e-6)
+        eye_remap[slot] = (lo, span)
+        print('eye slot %d UV normalised: u[%.3f..%.3f] -> [0..1] (span %.3f)'
+              % (slot, lo[0], lo[0] + span[0], span[0]))
+
+    def uv_of(slot, w):
+        u, v = mesh.wedge_uv[w]
+        remap = eye_remap.get(slot)
+        if remap is None:
+            return u, v
+        lo, span = remap
+        return (u - lo[0]) / span[0], (v - lo[1]) / span[1]
+
     # ---- classify every triangle into one part ---------------------------
     head_w = np.zeros(len(V))
     for i, d in enumerate(weights_x4):
@@ -294,7 +392,7 @@ def main():
                 continue
             parts.setdefault(stem, []).append(
                 (int(w[0]), int(w[1]), int(w[2]),
-                 mesh.wedge_uv[f[0]], mesh.wedge_uv[f[1]], mesh.wedge_uv[f[2]]))
+                 uv_of(slot, f[0]), uv_of(slot, f[1]), uv_of(slot, f[2])))
             counts[stem] = counts.get(stem, 0) + 1
     sel = mesh.faces[mesh.face_mat == 0]
     for f in sel:
@@ -303,7 +401,7 @@ def main():
         stem = 'skin_head' if head >= HEAD_WEIGHT_CUT else 'skin_body'
         parts.setdefault(stem, []).append(
             (int(w[0]), int(w[1]), int(w[2]),
-             mesh.wedge_uv[f[0]], mesh.wedge_uv[f[1]], mesh.wedge_uv[f[2]]))
+             uv_of(0, f[0]), uv_of(0, f[1]), uv_of(0, f[2])))
         counts[stem] = counts.get(stem, 0) + 1
     print('parts (source triangles): %s'
           % ', '.join('%s=%d' % kv for kv in sorted(counts.items())))

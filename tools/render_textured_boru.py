@@ -124,6 +124,11 @@ def main():
         'head34': ((ctr.x + 30, ctr.y + 44, head_z + 5),
                    (ctr.x, ctr.y, head_z), 30),
         'upper': ((ctr.x, ctr.y + 130, 140), (ctr.x, ctr.y, 140), 90),
+        'side': ((ctr.x + scale * 2.0, ctr.y, ctr.z), ctr, scale),
+        'sidehead': ((ctr.x + 40, ctr.y, 163.0), (ctr.x, ctr.y, 163.0), 34),
+        # only the eyes: 168 cm is the vanilla eye height, +-3.4 cm apart
+        'eyes': ((ctr.x, ctr.y + 40, 168.4), (ctr.x, ctr.y, 168.1), 7.2),
+        'eyes34': ((ctr.x + 10, ctr.y + 38, 169.5), (ctr.x, ctr.y, 168.1), 7.2),
     }
     paths.ensure(paths.PREVIEW)
     for view in views:
