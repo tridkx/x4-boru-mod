@@ -241,4 +241,9 @@ def main():
         build_asset(target, parts, used)
 
 
-main()
+try:
+    main()
+except Exception:
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)

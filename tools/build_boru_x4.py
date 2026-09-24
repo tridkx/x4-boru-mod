@@ -40,6 +40,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import paths                                                   # noqa: E402
+
+#: One switch that turns every *geometric* edit of this project off, leaving
+#: the retarget itself (the state the mod shipped in when it was first seen
+#: working in game).  Used for bisecting a load crash: if this builds and the
+#: full version crashes, the fault is in one of these edits and they can be
+#: switched back on one at a time.
+BASELINE = os.environ.get('BORU_BASELINE', '0') == '1'
 from psk_src import PskMesh                                    # noqa: E402
 from ue4_to_x4 import (CORE, DEFAULT_ADAPTER, build_bone_map,  # noqa: E402
                        check_core, report_map, side_of)
@@ -89,7 +96,7 @@ PART_SLOT = {
 #: as black sunglasses worn over the eyes, hiding the face.  The frames are
 #: not in this slot at all (they ride slot 0 with the skin) and survive.
 LENS_SLOT = 4
-LENS_Z = 148.0
+LENS_Z = None if BASELINE else 148.0
 
 #: a vertex is "head" when this much of its weight rides the head bone.  The
 #: neck blends from ~0 at the collarbone to 1 at the jaw, so any cut in
@@ -109,7 +116,7 @@ GROUND_Z = -0.5
 #: widens the top half to meet it.  The factor is graded by how much of a
 #: vertex rides the torso bones, so the shoulders and the sleeve seams blend
 #: instead of stepping.
-TORSO_SCALE = float(os.environ.get('BORU_TORSO', '1.14'))
+TORSO_SCALE = 1.0 if BASELINE else float(os.environ.get('BORU_TORSO', '1.14'))
 TORSO_BONES = ('Bip01 Pelvis', 'Bip01 Spine', 'Bip01 Spine1', 'Bip01 Spine2')
 #: above this nothing is widened, so the head, neck and arms keep their size
 TORSO_Z_MAX = 142.0
@@ -148,8 +155,8 @@ TORSO_Z_MAX = 142.0
 #: to satisfy the first makes it sit in front of the chest -- "the neck leans
 #: forward" -- which is the second, and the one you actually see.  So the
 #: default satisfies the second and stays put.
-HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '0.0'))
-HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '-4.0'))
+HEAD_TILT = 0.0 if BASELINE else float(os.environ.get('BORU_HEAD_TILT', '0.0'))
+HEAD_FORWARD = 0.0 if BASELINE else float(os.environ.get('BORU_HEAD_FWD', '-4.0'))
 
 #: (The neck used to take a fixed 55% share of the slide to stop the jaw seam
 #: from tearing.  The Z curve below spreads it continuously instead, so there
@@ -199,7 +206,7 @@ NECK_TILT = float(os.environ.get('BORU_NECK_TILT', '0.0'))
 #:   ride every joint above it, or the finger comes apart at the middle knuckle
 #:   -- which is what "only the tip bends" was.  The share applied at joint `j`
 #:   is therefore the vertex's weight on segment `j` *and everything beyond it*.
-FINGER_CURL = float(os.environ.get('BORU_FINGER_CURL', '20.0'))
+FINGER_CURL = 0.0 if BASELINE else float(os.environ.get('BORU_FINGER_CURL', '20.0'))
 
 #: Per-finger share of `FINGER_CURL`.  A thumb is not a finger: it curls far
 #: less in a relaxed hand (and its chain is rotated ~90 degrees out of the
@@ -226,7 +233,7 @@ FINGER_CHAINS = {
 #: look plausible; the engine does not, and it shows.  Each slot's UVs are
 #: therefore normalised to [0, 1] here, which maps the whole iris texture onto
 #: the eyeball -- what the texture was drawn for.
-EYE_SLOTS = (2, 3)
+EYE_SLOTS = () if BASELINE else (2, 3)
 
 #: Laplacian passes over the skin weights (0 = off).  Smoothing helps where a
 #: joint's neighbours are driven by bones whose fitted rotations differ a lot;
@@ -372,6 +379,10 @@ ASSET_OF = {stem: ('body' if stem in ('skin_body', 'cloth') else 'head')
 def main():
     paths.ensure(paths.WORK, paths.PREVIEW)
 
+    if BASELINE:
+        print('*** BASELINE build: every geometric edit disabled '
+              '(torso scale, leg pull, head move, finger curl, lens removal, '
+              'eye UV normalisation) ***')
     mesh = PskMesh.load(paths.SRC_PSK)
     print('source: %d points, %d faces, %d materials, %d bones'
           % (len(mesh.points), len(mesh.faces), len(mesh.mats),
@@ -568,7 +579,8 @@ def main():
         sel = mesh.faces[mesh.face_mat == slot]
         for f in sel:
             w = mesh.wedge_point[f]
-            if slot == LENS_SLOT and V[w][:, 2].min() > LENS_Z:
+            if (LENS_Z is not None and slot == LENS_SLOT
+                    and V[w][:, 2].min() > LENS_Z):
                 dropped += 1
                 continue
             parts.setdefault(stem, []).append(
@@ -621,4 +633,9 @@ def main():
     print('stats -> work/stage1_stats.json')
 
 
-main()
+try:
+    main()
+except Exception:
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
