@@ -1,37 +1,19 @@
 # -*- coding: utf-8 -*-
-"""
-Convert RE8 textures to the DDS formats X4CharacterConverter requires.
+"""DDS encoders for the formats X4CharacterConverter validates.
 
-RE8 character textures:
-  * `<name>_albd.png`   base colour (RGB, or RGBA for cut-out layers)
-  * `<name>_nrmr.png`   packed normal/roughness: RGB = tangent normal, A = roughness
-  * `<name>_atoc.png`   alpha/translucency/occlusion/cavity: A = opacity
+    role         X4 format     source
+    -----------  ------------  -------------------------------------------
+    Diffuse      BC1 / BC3     base colour (BC3 when the material needs alpha)
+    Normal       BC5           tangent-space normal (the shader rebuilds Z)
+    Smoothness   BC4           greyscale, 1 - roughness
 
-X4CharacterConverter binds textures to Blender image nodes named
-Diffuse / Normal / Metal / Smoothness and validates the DDS pixel format:
-
-  role         X4 format     source
-  -----------  ------------  -------------------------------------------
-  Diffuse      BC1 / BC3     _albd  (BC3 when the material needs alpha)
-  Normal       BC5           _nrmr RGB (shader reconstructs Z)
-  Smoothness   BC4           _nrmr A, inverted (roughness -> smoothness)
+Kept source-agnostic on purpose: the per-material choices live in
+`prepare_textures_boru.py` and the shader/blend mode in the manifest it writes.
+The bundled texconv DLL fails with E_NOINTERFACE on this machine, so block
+compression is done in-process by `bc_encode`.
 """
 
-# --- 项目根自动定位（work 已并入 x4-character-retarget）---
 import os
-_X4_WORK_PKG = os.path.dirname(os.path.abspath(__file__))
-_X4_DEV_ROOT = _X4_WORK_PKG
-while os.path.basename(_X4_DEV_ROOT) != 'x4-character-retarget':
-    _X4_UP = os.path.dirname(_X4_DEV_ROOT)
-    if _X4_UP == _X4_DEV_ROOT:
-        break
-    _X4_DEV_ROOT = _X4_UP
-_X4_DEV_ROOT = os.path.dirname(_X4_DEV_ROOT)
-
-# --- 项目根自动定位（work 已并入 x4-character-retarget）---
-import os
-
-# --- 项目根自动定位（work 已并入 x4-character-retarget）---
 import sys
 
 from PIL import Image
@@ -125,14 +107,3 @@ def convert_material_textures(key, info, tex_root, out_dir, tmp_dir,
     return out
 
 
-if __name__ == '__main__':
-    tex_root = r"D:\dsh-mod\re8\output\models\Rose_Adult_ShadowsOfRose"
-    out_dir = os.path.join(_X4_DEV_ROOT, 'work')
-    tmp_dir = os.path.join(_X4_DEV_ROOT, 'work')
-    info = {"albedo": "../../textures/ch01_6000_upperbody_albd.png",
-            "normalRoughness": "../../textures/ch01_6000_upperbody_nrmr.png"}
-    res = convert_material_textures('rose.body', info, tex_root, out_dir, tmp_dir)
-    print("produced:")
-    for r, p in res.items():
-        print("  %-12s %-40s %d bytes" % (r, os.path.basename(p),
-                                          os.path.getsize(p)))

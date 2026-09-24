@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-X4 material assembly for the Rose mod.
+X4 material assembly: one Blender material per X4 material.
 
 Responsibilities
 ----------------
@@ -19,8 +19,9 @@ import re
 
 import bpy
 
-#: X4 material collection name; material full name becomes "rose.<local>"
-COLLECTION = 'rose'
+#: X4 material collection name; the full name becomes "<collection>.<local>"
+#: (overridable per call -- `build_boru_mod.py` passes "boru")
+COLLECTION = 'boru'
 
 #: placeholder base colour when the source material has no albedo map.
 #: Values are linear-ish sRGB guesses matching each part's real appearance.
