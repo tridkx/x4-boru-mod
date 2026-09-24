@@ -151,18 +151,24 @@ TORSO_Z_MAX = 142.0
 HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '0.0'))
 HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '-4.0'))
 
-#: How much of the forward slide the neck takes with the head.
-#:
-#: 0 = only the head moves, which pulls the jaw/neck seam apart -- at -6 cm the
-#: head visibly detaches from the neck.  1 = the whole neck follows and the
-#: collar absorbs the offset instead.  0.55 splits it: the head still gets the
-#: full slide, the neck gets a bit over half, and the remainder is spread over
-#: the collar, where it reads as the neck leaning rather than as a tear.
-NECK_FWD_SHARE = 0.55
+#: (The neck used to take a fixed 55% share of the slide to stop the jaw seam
+#: from tearing.  The Z curve below spreads it continuously instead, so there
+#: is nothing left to share out -- the head still moves the full amount, the
+#: neck most of it, the collar almost none.)
 #: Z window (cm, relative to `Bip01 Neck`) over which the forward slide fades
-#: in.  Below `FWD_Z0` nothing moves -- that is the neck and the collar.
-FWD_Z0 = -1.0
-FWD_Z1 = 7.0
+#: in, and the lateral fade that keeps it off the shoulders and arms.
+#:
+#: The slide is graded by **geometry** (a smooth curve in Z, faded out by
+#: distance from the spine) and not by bone weights.  Grading it by weight --
+#: head, or head plus a share of neck -- looks right on paper but creases the
+#: neck: neighbouring vertices carry slightly different mixes of head / neck /
+#: spine / clavicle weight, so they get slightly different offsets, and a
+#: couple of millimetres of that across a neck reads as folds.  Height and
+#: distance from the midline are continuous, so the result is.
+FWD_Z0 = -8.0
+FWD_Z1 = 6.0
+FWD_RMAX = 20.0        # full slide inside this half-width (cm)
+FWD_RFADE = 7.0        # faded out over this much more, so nothing shears
 
 #: Straighten the neck, in degrees, about its own base.  Default 0: the neck's
 #: forward lean is the *source's*, not an artefact -- measured on the skin
@@ -430,16 +436,13 @@ def main():
     # neck, so the jaw, the collar and the shoulders blend instead of stepping.
     if abs(HEAD_TILT) > 0.01 or abs(HEAD_FORWARD) > 0.01:
         pivot = np.asarray(x4_bones['Bip01 Neck']['head'], float)
-        # forward slide: a Z window above the neck, times head + a share of
-        # the neck, so the head gets all of it and the neck follows part way
-        # instead of the seam being pulled open
-        hw = np.clip(np.array([d.get('Bip01 Head', 0.0)
-                               + NECK_FWD_SHARE * d.get('Bip01 Neck', 0.0)
-                               for d in weights_x4]), 0.0, 1.0)
-        hw = hw * hw * (3.0 - 2.0 * hw)
+        # forward slide, graded by geometry only (see FWD_Z0): a smooth ramp
+        # in Z that fades out sideways before it reaches the shoulders
         t = np.clip((V[:, 2] - (pivot[2] + FWD_Z0)) / (FWD_Z1 - FWD_Z0),
                     0.0, 1.0)
-        fwd = (t * t * (3.0 - 2.0 * t)) * hw
+        t = t * t * (3.0 - 2.0 * t)
+        r = np.clip((FWD_RMAX - np.abs(V[:, 0])) / FWD_RFADE, 0.0, 1.0)
+        fwd = t * (r * r * (3.0 - 2.0 * r))
         # tilt: graded by head+neck and pivoting on the neck base
         hw2 = np.clip(np.array([d.get('Bip01 Head', 0.0) + d.get('Bip01 Neck', 0.0)
                                 for d in weights_x4]), 0.0, 1.0)
@@ -451,10 +454,10 @@ def main():
             pivot[0] + rel[:, 0],
             pivot[1] + rel[:, 1] * c - rel[:, 2] * sn + HEAD_FORWARD * fwd,
             pivot[2] + rel[:, 1] * sn + rel[:, 2] * c])
-        print('head placed: tilt %+.1f deg, forward %+.1f cm over z %.0f..%.0f '
-              '(%d vertices moved)'
+        print('head placed: tilt %+.1f deg, forward %+.1f cm over z %.0f..%.0f, '
+              'fading out by |x| %.0f..%.0f (%d vertices moved)'
               % (HEAD_TILT, HEAD_FORWARD, pivot[2] + FWD_Z0, pivot[2] + FWD_Z1,
-                 int((fwd > 1e-3).sum())))
+                 FWD_RMAX, FWD_RMAX + FWD_RFADE, int((fwd > 1e-3).sum())))
 
     # ---- extra finger curl (see FINGER_CURL) -----------------------------
     if abs(FINGER_CURL) > 0.01:
