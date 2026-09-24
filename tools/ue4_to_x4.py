@@ -160,8 +160,9 @@ LEG_BONES = {'Bip01 L Thigh', 'Bip01 R Thigh', 'Bip01 L Calf', 'Bip01 R Calf',
              'Bip01 L Foot', 'Bip01 R Foot', 'Bip01 L Toe0', 'Bip01 R Toe0'}
 
 #: 0 = vanilla X4 stance width, 1 = the source's own (legs together).
-LEG_PULL = (0.0 if os.environ.get('BORU_BASELINE', '0') == '1'
-            else float(os.environ.get('BORU_LEG_PULL', '0.65')))
+LEG_PULL = float(os.environ.get(
+    'BORU_LEG_PULL',
+    '0.0' if os.environ.get('BORU_BASELINE', '0') == '1' else '0.65'))
 
 #: Where the finger weights go.
 #:
@@ -175,8 +176,9 @@ LEG_PULL = (0.0 if os.environ.get('BORU_BASELINE', '0') == '1'
 #: spread**, so letting them follow the X4 joints is what closes the hand into
 #: the relaxed half-fist every other NPC has -- and because the fingers start
 #: apart, closing them cannot tear the web (it can only make them touch).
-FINGERS_BIND_TO_PALM = (True if os.environ.get('BORU_BASELINE', '0') == '1'
-                        else os.environ.get('BORU_FINGERS', 'free') != 'free')
+FINGERS_BIND_TO_PALM = os.environ.get(
+    'BORU_FINGERS',
+    'palm' if os.environ.get('BORU_BASELINE', '0') == '1' else 'free') != 'free'
 
 
 def ue4_to_blender(p):

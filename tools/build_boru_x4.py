@@ -96,8 +96,13 @@ PART_SLOT = {
 #: as black sunglasses worn over the eyes, hiding the face.  The frames are
 #: not in this slot at all (they ride slot 0 with the skin) and survive.
 LENS_SLOT = 4
-LENS_Z = (None if (BASELINE or os.environ.get('BORU_LENS', '0') == '1')
-          else 148.0)
+# precedence: an explicit env var wins over BASELINE, so a single edit can be
+# switched back on for bisecting (BASELINE then only supplies the defaults)
+def _flag(name):
+    return os.environ.get(name, '0') == '1'
+
+
+LENS_Z = None if (BASELINE or _flag('BORU_LENS')) else 148.0
 
 #: a vertex is "head" when this much of its weight rides the head bone.  The
 #: neck blends from ~0 at the collarbone to 1 at the jaw, so any cut in
@@ -117,7 +122,8 @@ GROUND_Z = -0.5
 #: widens the top half to meet it.  The factor is graded by how much of a
 #: vertex rides the torso bones, so the shoulders and the sleeve seams blend
 #: instead of stepping.
-TORSO_SCALE = 1.0 if BASELINE else float(os.environ.get('BORU_TORSO', '1.14'))
+TORSO_SCALE = float(os.environ.get('BORU_TORSO',
+                                   '1.0' if BASELINE else '1.14'))
 TORSO_BONES = ('Bip01 Pelvis', 'Bip01 Spine', 'Bip01 Spine1', 'Bip01 Spine2')
 #: above this nothing is widened, so the head, neck and arms keep their size
 TORSO_Z_MAX = 142.0
@@ -156,8 +162,9 @@ TORSO_Z_MAX = 142.0
 #: to satisfy the first makes it sit in front of the chest -- "the neck leans
 #: forward" -- which is the second, and the one you actually see.  So the
 #: default satisfies the second and stays put.
-HEAD_TILT = 0.0 if BASELINE else float(os.environ.get('BORU_HEAD_TILT', '0.0'))
-HEAD_FORWARD = 0.0 if BASELINE else float(os.environ.get('BORU_HEAD_FWD', '-4.0'))
+HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '0.0'))
+HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD',
+                                    '0.0' if BASELINE else '-4.0'))
 
 #: (The neck used to take a fixed 55% share of the slide to stop the jaw seam
 #: from tearing.  The Z curve below spreads it continuously instead, so there
@@ -207,7 +214,8 @@ NECK_TILT = float(os.environ.get('BORU_NECK_TILT', '0.0'))
 #:   ride every joint above it, or the finger comes apart at the middle knuckle
 #:   -- which is what "only the tip bends" was.  The share applied at joint `j`
 #:   is therefore the vertex's weight on segment `j` *and everything beyond it*.
-FINGER_CURL = 0.0 if BASELINE else float(os.environ.get('BORU_FINGER_CURL', '20.0'))
+FINGER_CURL = float(os.environ.get('BORU_FINGER_CURL',
+                                   '0.0' if BASELINE else '20.0'))
 
 #: Per-finger share of `FINGER_CURL`.  A thumb is not a finger: it curls far
 #: less in a relaxed hand (and its chain is rotated ~90 degrees out of the
@@ -234,8 +242,7 @@ FINGER_CHAINS = {
 #: look plausible; the engine does not, and it shows.  Each slot's UVs are
 #: therefore normalised to [0, 1] here, which maps the whole iris texture onto
 #: the eyeball -- what the texture was drawn for.
-EYE_SLOTS = (() if (BASELINE or os.environ.get('BORU_EYE_UV', '0') == '1')
-             else (2, 3))
+EYE_SLOTS = (() if (BASELINE or _flag('BORU_EYE_UV')) else (2, 3))
 
 #: Laplacian passes over the skin weights (0 = off).  Smoothing helps where a
 #: joint's neighbours are driven by bones whose fitted rotations differ a lot;
