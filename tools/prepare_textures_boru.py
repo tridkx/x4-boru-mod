@@ -58,10 +58,18 @@ MATERIALS = {
              'in the source game)'),
     'eyes': dict(
         diffuse='T_Common_Eyes_01_D.png',
-        # `p1_eye_ball` is what every eyeball material in the vanilla library
-        # uses (`p1_char_ter_eye_dark_01`, `p1_char_arg_m_eyeball_cau_01`, ...);
-        # `p1_character` is the skin shader and renders the iris flat and dark.
-        shader='p1_eye_ball', blendmode='NONE', alpha=False, smooth=0.60,
+        # NOT `p1_eye_ball`.  That is the shader the vanilla eyeballs use, and
+        # switching to it is what crashed the game on entering a station
+        # (0xC0000005, exception address 0x0 -- a call through a null function
+        # pointer).  The reason is visible in the vanilla material: its
+        # `p1_eye_ball` entries carry `diffuse_detail_tiling`,
+        # `normal_detail_tiling`, `color_dirt_tiling`, `diffuse_paintStr` and
+        # friends, i.e. the shader samples detail / dirt / paint maps.  Ours
+        # binds none of those, so those samplers are null and the shader jumps
+        # through one.  `p1_character` takes the same three maps we do have.
+        # The iris still shows correctly because the UVs are normalised onto
+        # the texture (see build_boru_x4.EYE_SLOTS).
+        shader='p1_character', blendmode='NONE', alpha=False, smooth=0.60,
         note='shared eye texture'),
     'hair': dict(
         diffuse='T_Hair_D.png', normal='T_Hair_N.png',
