@@ -96,7 +96,8 @@ PART_SLOT = {
 #: as black sunglasses worn over the eyes, hiding the face.  The frames are
 #: not in this slot at all (they ride slot 0 with the skin) and survive.
 LENS_SLOT = 4
-LENS_Z = None if BASELINE else 148.0
+LENS_Z = (None if (BASELINE or os.environ.get('BORU_LENS', '0') == '1')
+          else 148.0)
 
 #: a vertex is "head" when this much of its weight rides the head bone.  The
 #: neck blends from ~0 at the collarbone to 1 at the jaw, so any cut in
@@ -233,7 +234,8 @@ FINGER_CHAINS = {
 #: look plausible; the engine does not, and it shows.  Each slot's UVs are
 #: therefore normalised to [0, 1] here, which maps the whole iris texture onto
 #: the eyeball -- what the texture was drawn for.
-EYE_SLOTS = () if BASELINE else (2, 3)
+EYE_SLOTS = (() if (BASELINE or os.environ.get('BORU_EYE_UV', '0') == '1')
+             else (2, 3))
 
 #: Laplacian passes over the skin weights (0 = off).  Smoothing helps where a
 #: joint's neighbours are driven by bones whose fitted rotations differ a lot;
