@@ -1,5 +1,9 @@
 # 孟柏汝 BoRu → X4: Foundations **Argon 女性** NPC
 
+> 源码：<https://github.com/tridkx/x4-boru-mod> · 成品 mod 见 [Releases](https://github.com/tridkx/x4-boru-mod/releases)
+> —— 与作者另外两个 X4 项目同源：[x4-character-retarget](https://github.com/tridkx/x4-character-retarget)（管线与文档）、
+> [x4-lumine-mod](https://github.com/tridkx/x4-lumine-mod)（第二个角色）。
+
 把《女鬼桥 开魂路》(The Bridge Curse: Road to Salvation) 的女主角**孟柏汝**
 （UE4 骨骼网格 `SK_BR`，80 骨）移植成《X4：基石》里的 Argon 女性 NPC 外观。
 
