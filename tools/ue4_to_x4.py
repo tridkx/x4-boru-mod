@@ -160,7 +160,7 @@ LEG_BONES = {'Bip01 L Thigh', 'Bip01 R Thigh', 'Bip01 L Calf', 'Bip01 R Calf',
              'Bip01 L Foot', 'Bip01 R Foot', 'Bip01 L Toe0', 'Bip01 R Toe0'}
 
 #: 0 = vanilla X4 stance width, 1 = the source's own (legs together).
-LEG_PULL = float(os.environ.get('BORU_LEG_PULL', '0.45'))
+LEG_PULL = float(os.environ.get('BORU_LEG_PULL', '0.65'))
 
 #: Where the finger weights go.
 #:

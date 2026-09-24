@@ -130,30 +130,58 @@ TORSO_Z_MAX = 142.0
 #: while the jaw, being next to the pivot, hardly moves.  Two rounds of "it
 #: still looks tilted" were this knob being turned the wrong way.  Default 0.
 #:
-#: **`HEAD_FORWARD`** slides the head+neck forward along the chest.  Both rigs
-#: put the neck behind the chest, but by different amounts -- measured against
-#: the same skeleton, the model's neck sits 2.4 cm further back and its face
-#: 3.3 cm further back than the vanilla head at the same heights.  That offset
-#: is what reads as "the neck leans forward": the neck joins the shoulders
-#: behind where they are, so it rises forward to reach the face.
+#: **`HEAD_FORWARD`** slides the *head* forward along the chest, and only the
+#: head: the window is measured in Z above the neck joint, fading out before it
+#: reaches the neck itself.  Grading it by the head+neck weight instead (the
+#: first attempt) moves the top of the neck more than the bottom, which tilts
+#: the neck forward -- exactly the symptom it was meant to cure.  The face sits
+#: ~3 cm behind the vanilla one at the same heights; the neck does not.
 HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '0.0'))
-HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '2.0'))
+HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '2.2'))
+#: Z window (cm, relative to `Bip01 Neck`) over which the forward slide fades
+#: in.  Below `FWD_Z0` nothing moves -- that is the neck and the collar.
+FWD_Z0 = -1.0
+FWD_Z1 = 7.0
 
-#: Extra curl per finger joint, in degrees, on top of what the retarget gives.
+#: Straighten the neck, in degrees, about its own base.  Default 0: the neck's
+#: forward lean is the *source's*, not an artefact -- measured on the skin
+#: alone, the front edge of her neck rises 13.2 degrees going up (5.49 -> 7.84
+#: cm over 10 cm), and after the transfer it is 7.9 degrees, i.e. straighter
+#: than she was.  It reads as "the neck is slanted" because her collar is a
+#: low-cut shirt and the whole neck is on show, where the vanilla Argon
+#: female's turtleneck hides hers.  Turn this negative to force it upright.
+NECK_TILT = float(os.environ.get('BORU_NECK_TILT', '0.0'))
+
+#: Extra curl per finger joint, in degrees, applied on top of the retarget.
 #:
-#: Letting the fingers follow their own joints (`BORU_FINGERS=free`) already
-#: takes the hand from "spread flat" to "hanging, slightly bent", because the
-#: X4 finger chains are authored bent.  It does not make a fist: the source
-#: fingers are straight in its T-pose, and matching a straight segment to a
-#: bent one only rotates it as a whole -- the *joint angles* of the source
-#: carry no curl to transfer.  So the curl is added here, one rotation per
-#: segment about that segment's own joint, with the weight as the blend so the
-#: knuckles do not crease.
+#: Letting the fingers follow their own joints (`BORU_FINGERS=free`) takes the
+#: hand from "spread flat" to "hanging, slightly bent", because the X4 chains
+#: are authored bent.  It does not make a fist: the source fingers are straight
+#: in its T-pose, and matching a straight segment to a bent one only rotates it
+#: as a whole -- there is no joint angle in the source to transfer.  So the
+#: curl is added here.
 #:
-#: The axis is the hand's own: with the arms hanging, the palm faces the body,
-#: so the fingers close by rotating about the forward axis -- +y for the left
-#: hand, -y for the right.
-FINGER_CURL = float(os.environ.get('BORU_FINGER_CURL', '22.0'))
+#: Two things this must get right, both learned by getting them wrong:
+#:
+#: * **The axis is the finger's own.**  A single hard-coded "close about the
+#:   forward axis" works for the index and middle finger and twists the thumb
+#:   and little finger, whose chains do not lie in that plane.  Each joint's
+#:   axis is taken from the X4 rig itself: `cross(incoming, outgoing)`, which
+#:   is the normal of the plane that joint bends in.
+#: * **The joints accumulate.**  A vertex weighted to the *last* segment has to
+#:   ride every joint above it, or the finger comes apart at the middle knuckle
+#:   -- which is what "only the tip bends" was.  The share applied at joint `j`
+#:   is therefore the vertex's weight on segment `j` *and everything beyond it*.
+FINGER_CURL = float(os.environ.get('BORU_FINGER_CURL', '20.0'))
+
+#: the X4 finger chains, root first (thumb is Finger0 on this rig)
+FINGER_CHAINS = {
+    'thumb': ('Finger0', 'Finger01', 'Finger02'),
+    'index': ('Finger1', 'Finger11', 'Finger12'),
+    'middle': ('Finger2', 'Finger21', 'Finger22'),
+    'ring': ('Finger3', 'Finger31', 'Finger32'),
+    'pinky': ('Finger4', 'Finger41', 'Finger42'),
+}
 
 
 
@@ -171,6 +199,16 @@ EYE_SLOTS = (2, 3)
 #: it is applied to the skin only, never to the hair or the glasses, whose
 #: weights are already uniform.
 WEIGHT_SMOOTH_ROUNDS = int(os.environ.get('BORU_SMOOTH', '0'))
+
+
+def _axis_rot(axis, angle):
+    """Rodrigues rotation about a unit axis."""
+    axis = np.asarray(axis, float)
+    axis = axis / (np.linalg.norm(axis) or 1.0)
+    k = np.array([[0.0, -axis[2], axis[1]],
+                  [axis[2], 0.0, -axis[0]],
+                  [-axis[1], axis[0], 0.0]])
+    return np.eye(3) + np.sin(angle) * k + (1.0 - np.cos(angle)) * (k @ k)
 
 
 def load_x4_armature():
@@ -363,58 +401,104 @@ def main():
     # Both are graded by the head+neck weight and pivot on the base of the
     # neck, so the jaw, the collar and the shoulders blend instead of stepping.
     if abs(HEAD_TILT) > 0.01 or abs(HEAD_FORWARD) > 0.01:
-        hw = np.clip(np.array([d.get('Bip01 Head', 0.0) + d.get('Bip01 Neck', 0.0)
-                               for d in weights_x4]), 0.0, 1.0)
-        s_ = hw * hw * (3.0 - 2.0 * hw)            # smoothstep, no hard seam
         pivot = np.asarray(x4_bones['Bip01 Neck']['head'], float)
+        hw = np.clip(np.array([d.get('Bip01 Head', 0.0) for d in weights_x4]),
+                     0.0, 1.0)
+        # forward slide: a Z window above the neck, times the head weight, so
+        # neither the neck nor anything that is not head moves with it
+        t = np.clip((V[:, 2] - (pivot[2] + FWD_Z0)) / (FWD_Z1 - FWD_Z0),
+                    0.0, 1.0)
+        fwd = (t * t * (3.0 - 2.0 * t)) * hw
+        # tilt: graded by head+neck and pivoting on the neck base
+        hw2 = np.clip(np.array([d.get('Bip01 Head', 0.0) + d.get('Bip01 Neck', 0.0)
+                                for d in weights_x4]), 0.0, 1.0)
+        s_ = hw2 * hw2 * (3.0 - 2.0 * hw2)
         rel = V - pivot
         th = np.radians(HEAD_TILT) * s_
         c, sn = np.cos(th), np.sin(th)
         V = np.column_stack([
             pivot[0] + rel[:, 0],
-            pivot[1] + rel[:, 1] * c - rel[:, 2] * sn + HEAD_FORWARD * s_,
+            pivot[1] + rel[:, 1] * c - rel[:, 2] * sn + HEAD_FORWARD * fwd,
             pivot[2] + rel[:, 1] * sn + rel[:, 2] * c])
-        print('head placed: tilt %+.1f deg, forward %+.1f cm (%d vertices)'
-              % (HEAD_TILT, HEAD_FORWARD, int((s_ > 1e-3).sum())))
+        print('head placed: tilt %+.1f deg, forward %+.1f cm over z %.0f..%.0f '
+              '(%d vertices moved)'
+              % (HEAD_TILT, HEAD_FORWARD, pivot[2] + FWD_Z0, pivot[2] + FWD_Z1,
+                 int((fwd > 1e-3).sum())))
 
     # ---- extra finger curl (see FINGER_CURL) -----------------------------
     if abs(FINGER_CURL) > 0.01:
-        # every source finger segment that has an X4 joint of its own
-        # The *first* segment is left alone: it is the one whose weights blend
-        # into the palm, and rotating it shears that seam open (a visible slit
-        # across the palm).  Curling from the middle joint inwards gives the
-        # half-fist look without touching the hand's own geometry.
-        seg_joint = {}
-        for b in CORE:
-            B = CORE[b]
-            if 'Finger' in B and B in x4_bones and '_01_' not in b:
-                seg_joint[b] = B
         th = np.radians(FINGER_CURL)
-        c, sn = np.cos(th), np.sin(th)
-        moved = 0
-        for b, B in sorted(seg_joint.items()):
-            side = side_of(b)
-            if side is None:
-                continue
-            sign = 1.0 if side == 'L' else -1.0
-            joint = np.asarray(x4_bones[B]['head'], float)
-            w = np.array([d.get(B, 0.0) for d in weights_x4])
-            w = np.clip(w, 0.0, 1.0)
-            k = w * w * (3.0 - 2.0 * w)
-            sel = k > 1e-4
-            if not sel.any():
-                continue
-            rel = V[sel] - joint
-            ang = th * k[sel] * sign
-            cc, ss = np.cos(ang), np.sin(ang)
-            # rotation about the forward axis: (x, z) -> (x cos - z sin, ...)
-            x2 = rel[:, 0] * cc - rel[:, 2] * ss
-            z2 = rel[:, 0] * ss + rel[:, 2] * cc
-            V[sel] = np.column_stack([joint[0] + x2, joint[1] + rel[:, 1],
-                                      joint[2] + z2])
-            moved += int(sel.sum())
-        print('finger curl %.1f deg/joint applied to %d finger segments '
-              '(%d vertex hits)' % (FINGER_CURL, len(seg_joint), moved))
+        hand_of = {'L': 'Bip01 L Hand', 'R': 'Bip01 R Hand'}
+        total = 0
+        for side in ('L', 'R'):
+            for fname, chain in sorted(FINGER_CHAINS.items()):
+                bones = ['Bip01 %s %s' % (side, b) for b in chain]
+                if not all(b in x4_bones for b in bones):
+                    continue
+                n = len(bones)
+                pivots, axes = [], []
+                prev = np.asarray(x4_bones[hand_of[side]]['head'], float)
+                for b in bones:
+                    head = np.asarray(x4_bones[b]['head'], float)
+                    tail = np.asarray(x4_bones[b]['tail'], float)
+                    axis = np.cross(head - prev, tail - head)
+                    ln = float(np.linalg.norm(axis))
+                    axes.append(axis / ln if ln > 1e-9 else None)
+                    pivots.append(head)
+                    prev = head
+
+                # the sign that brings the fingertip towards the wrist
+                tip = np.asarray(x4_bones[bones[-1]]['tail'], float)
+                wrist = np.asarray(x4_bones[hand_of[side]]['head'], float)
+                sign = 1.0
+                best_d = None
+                for cand in (1.0, -1.0):
+                    p = tip.copy()
+                    for k in range(n):
+                        if axes[k] is None:
+                            continue
+                        p = pivots[k] + _axis_rot(axes[k], th * cand) @ (p - pivots[k])
+                    d = float(np.linalg.norm(p - wrist))
+                    if best_d is None or d < best_d:
+                        sign, best_d = cand, d
+
+                wseg = [np.array([dd.get(b, 0.0) for dd in weights_x4])
+                        for b in bones]
+                sel = np.sum(wseg, axis=0) > 1e-4
+                if not sel.any():
+                    continue
+                idx = np.where(sel)[0]
+                pts = V[idx].copy()
+
+                # how much of the curl each joint applies to each vertex: the
+                # weight on that segment *and everything beyond it*, so a
+                # fingertip vertex rides every joint above it
+                shares = []
+                acc = np.zeros(len(idx))
+                for k in range(n - 1, -1, -1):
+                    acc = acc + wseg[k][idx]
+                    shares.append(np.clip(acc, 0.0, 1.0))
+                shares.reverse()
+
+                # apply root-first, and carry the rotations down to the later
+                # pivots so the chain bends instead of fanning out
+                for k in range(n):
+                    if axes[k] is None:
+                        continue
+                    Rk = _axis_rot(axes[k], th * sign)
+                    piv = pivots[k]
+                    for j in range(len(idx)):
+                        a = shares[k][j]
+                        if a <= 1e-4:
+                            continue
+                        R = _axis_rot(axes[k], th * sign * a)
+                        pts[j] = piv + R @ (pts[j] - piv)
+                    for m in range(k + 1, n):
+                        pivots[m] = piv + Rk @ (pivots[m] - piv)
+                V[idx] = pts
+                total += len(idx)
+        print('finger curl %.1f deg/joint, per-finger axis, cumulative, '
+              'root-first (%d vertex hits)' % (FINGER_CURL, total))
 
     # ---- eyeball UVs into [0, 1] (see EYE_SLOTS) -------------------------
     eye_remap = {}

@@ -56,21 +56,30 @@ def head_weights(ob):
     return out
 
 
-def apply(ob, tilt_deg, lift_cm, pivot):
-    if abs(tilt_deg) < 1e-6 and abs(lift_cm) < 1e-6:
+#: Z window (cm above `Bip01 Neck`) the forward slide fades in over -- the same
+#: numbers `build_boru_x4.py` uses, so this grid previews the real thing.
+FWD_Z0, FWD_Z1 = -1.0, 7.0
+
+
+def apply(ob, tilt_deg, fwd_cm, pivot):
+    if abs(tilt_deg) < 1e-6 and abs(fwd_cm) < 1e-6:
         return
     th = math.radians(tilt_deg)
     c, s = math.cos(th), math.sin(th)
     for v, w in zip(ob.data.vertices, head_weights(ob)):
         k = w * w * (3.0 - 2.0 * w)
-        if k <= 1e-6:
-            continue
         x, y, z = v.co
+        t = max(0.0, min(1.0, (z - (pivot[2] + FWD_Z0)) / (FWD_Z1 - FWD_Z0)))
+        t = t * t * (3.0 - 2.0 * t)
+        hw = 1.0 if w > 0.5 else w            # head-only share
+        dy = fwd_cm * t * hw
+        if k <= 1e-6 and abs(dy) < 1e-6:
+            continue
         rx, ry, rz = x - pivot[0], y - pivot[1], z - pivot[2]
         v.co = mathutils.Vector((
             pivot[0] + rx,
-            pivot[1] + ry * c - rz * s,
-            pivot[2] + ry * s + rz * c + lift_cm * k))
+            pivot[1] + ry * c - rz * s + dy,
+            pivot[2] + ry * s + rz * c))
 
 
 def camera(scn, rx, ry, centre_z, height):
@@ -88,7 +97,7 @@ def camera(scn, rx, ry, centre_z, height):
 
 
 def main():
-    sets = [s for s in arg('--sets', '0,0 5,0 0,2 5,2').split() if s]
+    sets = [s for s in arg('--sets', '0,0 0,1.5 0,3 0,4.5').split() if s]
     rx, ry = int(arg('--rx', 420)), int(arg('--ry', 620))
     centre_z = float(arg('--centre-z', 165.0))
     height = float(arg('--height', 46.0))
@@ -129,15 +138,20 @@ def main():
             ob.data.materials.clear()
             ob.data.materials.append(mat)
 
-    # every object shares the same shared geometry, so apply once per set and
-    # reload between sets
+    # `open_mainfile` between sets wipes the lights, world and materials set
+    # up above (the first version rendered four black frames), so the original
+    # coordinates are snapshotted and restored instead.
+    base = {ob.name: [v.co.copy() for v in ob.data.vertices]
+            for ob in bpy.data.objects if ob.type == 'MESH'}
+
     for spec in sets:
         tilt, lift = [float(x) for x in spec.split(',')]
-        bpy.ops.wm.open_mainfile(filepath=paths.STAGE1_BLEND)
-        scn = bpy.context.scene
         for ob in bpy.data.objects:
-            if ob.type == 'MESH':
-                apply(ob, tilt, lift, pivot)
+            if ob.type != 'MESH':
+                continue
+            for v, co in zip(ob.data.vertices, base[ob.name]):
+                v.co = co
+            apply(ob, tilt, lift, pivot)
         camera(scn, rx, ry, centre_z, height)
         out = os.path.join(paths.PREVIEW,
                            'tunehead_%s_%s.png' % (spec.replace(',', '_'),
