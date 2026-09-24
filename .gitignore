@@ -1,0 +1,34 @@
+# game / mod assets must never be committed
+*.xac
+*.xsm
+*.cat
+*.dat
+*.gz
+*.dds
+*.png
+*.bmp
+*.jpg
+*.blend
+*.blend1
+*.npy
+*.npz
+
+# extracted, generated or downloaded content
+assets/
+extensions/
+tex_out/
+x4cc_pkg/
+vanilla/
+preview/
+dist/
+
+# `work/` is this project's scratch space: the stage-1 blend, the DDS set, the
+# exported packages, the assembled mod trees and the installed extension.  All
+# of it is regenerated from scratch by `tools/build_all.py` (the build is a
+# full rewrite, never a patch), so keeping it out of git also keeps
+# `git status` readable while iterating.
+work/
+
+# python
+__pycache__/
+*.pyc
