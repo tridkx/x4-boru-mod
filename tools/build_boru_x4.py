@@ -149,7 +149,16 @@ TORSO_Z_MAX = 142.0
 #: forward" -- which is the second, and the one you actually see.  So the
 #: default satisfies the second and stays put.
 HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '0.0'))
-HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '-6.0'))
+HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '-4.0'))
+
+#: How much of the forward slide the neck takes with the head.
+#:
+#: 0 = only the head moves, which pulls the jaw/neck seam apart -- at -6 cm the
+#: head visibly detaches from the neck.  1 = the whole neck follows and the
+#: collar absorbs the offset instead.  0.55 splits it: the head still gets the
+#: full slide, the neck gets a bit over half, and the remainder is spread over
+#: the collar, where it reads as the neck leaning rather than as a tear.
+NECK_FWD_SHARE = 0.55
 #: Z window (cm, relative to `Bip01 Neck`) over which the forward slide fades
 #: in.  Below `FWD_Z0` nothing moves -- that is the neck and the collar.
 FWD_Z0 = -1.0
@@ -421,10 +430,13 @@ def main():
     # neck, so the jaw, the collar and the shoulders blend instead of stepping.
     if abs(HEAD_TILT) > 0.01 or abs(HEAD_FORWARD) > 0.01:
         pivot = np.asarray(x4_bones['Bip01 Neck']['head'], float)
-        hw = np.clip(np.array([d.get('Bip01 Head', 0.0) for d in weights_x4]),
-                     0.0, 1.0)
-        # forward slide: a Z window above the neck, times the head weight, so
-        # neither the neck nor anything that is not head moves with it
+        # forward slide: a Z window above the neck, times head + a share of
+        # the neck, so the head gets all of it and the neck follows part way
+        # instead of the seam being pulled open
+        hw = np.clip(np.array([d.get('Bip01 Head', 0.0)
+                               + NECK_FWD_SHARE * d.get('Bip01 Neck', 0.0)
+                               for d in weights_x4]), 0.0, 1.0)
+        hw = hw * hw * (3.0 - 2.0 * hw)
         t = np.clip((V[:, 2] - (pivot[2] + FWD_Z0)) / (FWD_Z1 - FWD_Z0),
                     0.0, 1.0)
         fwd = (t * t * (3.0 - 2.0 * t)) * hw
