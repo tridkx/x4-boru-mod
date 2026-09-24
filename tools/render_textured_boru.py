@@ -127,6 +127,8 @@ def main():
         'side': ((ctr.x + scale * 2.0, ctr.y, ctr.z), ctr, scale),
         'sidehead': ((ctr.x + 40, ctr.y, 163.0), (ctr.x, ctr.y, 163.0), 34),
         # only the eyes: 168 cm is the vanilla eye height, +-3.4 cm apart
+        # left hand: X4's Bip01 L Hand hangs at (+43, +7, 98); ours follows
+        'hand': ((ctr.x + 62, ctr.y + 42, 99.0), (ctr.x + 43, ctr.y, 97.0), 26),
         'eyes': ((ctr.x, ctr.y + 40, 168.4), (ctr.x, ctr.y, 168.1), 7.2),
         'eyes34': ((ctr.x + 10, ctr.y + 38, 169.5), (ctr.x, ctr.y, 168.1), 7.2),
     }

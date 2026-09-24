@@ -41,8 +41,8 @@ sys.path.insert(0, HERE)
 
 import paths                                                   # noqa: E402
 from psk_src import PskMesh                                    # noqa: E402
-from ue4_to_x4 import (DEFAULT_ADAPTER, build_bone_map,        # noqa: E402
-                       check_core, report_map)
+from ue4_to_x4 import (CORE, DEFAULT_ADAPTER, build_bone_map,  # noqa: E402
+                       check_core, report_map, side_of)
 from retarget_core import BindPoseRetarget                     # noqa: E402
 
 if paths.ADDON_DIR:
@@ -109,26 +109,53 @@ GROUND_Z = -0.5
 #: widens the top half to meet it.  The factor is graded by how much of a
 #: vertex rides the torso bones, so the shoulders and the sleeve seams blend
 #: instead of stepping.
-TORSO_SCALE = float(os.environ.get('BORU_TORSO', '1.08'))
+TORSO_SCALE = float(os.environ.get('BORU_TORSO', '1.14'))
 TORSO_BONES = ('Bip01 Pelvis', 'Bip01 Spine', 'Bip01 Spine1', 'Bip01 Spine2')
 #: above this nothing is widened, so the head, neck and arms keep their size
 TORSO_Z_MAX = 142.0
 
-#: Degrees to lift the head, about the `Bip01 Head` joint.
+#: Head placement, in two independent knobs.  Both were argued from
+#: measurements, and the first attempt got the sign of the first one wrong --
+#: which is worth spelling out because the numbers looked right.
 #:
-#: The rigs disagree about where the head bone sits relative to the face.
-#: Measured as the angle of "head bone -> eyeball centre" off vertical:
+#: **`HEAD_TILT`** rotates the head+neck about the base of the neck.  Measured
+#: by "front of the jaw vs front of the brow" (vanilla: -0.11 cm, i.e. the face
+#: profile is vertical):
 #:
-#:     source rig        46.8 deg      (eyeball 6.3 cm above the head bone)
-#:     this transfer     45.9 deg      -- the transfer preserved it, to 1 deg
-#:     vanilla X4        36.0 deg      (eyeball 10.25 cm above the head bone)
+#:     tilt   0 deg -> -1.50 cm        tilt +9 deg -> -3.46 cm
+#:     tilt  +6 deg -> -2.41 cm        tilt +14 deg -> -5.03 cm
 #:
-#: So the geometry is right and still reads as "looking down": X4's head bone
-#: sits lower in the skull, and every animation is authored against that.  The
-#: fix is to rotate the head geometry until it matches the attitude the rest of
-#: the game's faces have -- which is also what puts the top of the skull back
-#: over the neck instead of in front of it.
-HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '5.7'))
+#: so rotating the way I first did makes the face point *further down*: the
+#: rotation moves the brow back by `z * sin(tilt)` (20 cm x sin 9 deg = 3.1 cm)
+#: while the jaw, being next to the pivot, hardly moves.  Two rounds of "it
+#: still looks tilted" were this knob being turned the wrong way.  Default 0.
+#:
+#: **`HEAD_FORWARD`** slides the head+neck forward along the chest.  Both rigs
+#: put the neck behind the chest, but by different amounts -- measured against
+#: the same skeleton, the model's neck sits 2.4 cm further back and its face
+#: 3.3 cm further back than the vanilla head at the same heights.  That offset
+#: is what reads as "the neck leans forward": the neck joins the shoulders
+#: behind where they are, so it rises forward to reach the face.
+HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '0.0'))
+HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '2.0'))
+
+#: Extra curl per finger joint, in degrees, on top of what the retarget gives.
+#:
+#: Letting the fingers follow their own joints (`BORU_FINGERS=free`) already
+#: takes the hand from "spread flat" to "hanging, slightly bent", because the
+#: X4 finger chains are authored bent.  It does not make a fist: the source
+#: fingers are straight in its T-pose, and matching a straight segment to a
+#: bent one only rotates it as a whole -- the *joint angles* of the source
+#: carry no curl to transfer.  So the curl is added here, one rotation per
+#: segment about that segment's own joint, with the weight as the blend so the
+#: knuckles do not crease.
+#:
+#: The axis is the hand's own: with the arms hanging, the palm faces the body,
+#: so the fingers close by rotating about the forward axis -- +y for the left
+#: hand, -y for the right.
+FINGER_CURL = float(os.environ.get('BORU_FINGER_CURL', '22.0'))
+
+
 
 #: The source eye slots carry UVs outside [0, 1] -- slot 2 puts 96% of its
 #: wedges at u in [1, 7] (an atlas page index, most likely) and slot 3 sits at
@@ -331,15 +358,11 @@ def main():
               % (TORSO_SCALE, moved, before,
                  V[:, 0].max() - V[:, 0].min()))
 
-    # ---- lift the head to the X4 head/eye attitude -----------------------
+    # ---- head placement (see HEAD_TILT / HEAD_FORWARD) -------------------
     #
-    # The rotation pivots on the *base of the neck* and fades out with the
-    # head+neck weight, not on `Bip01 Head`.  Pivoting on the head bone and
-    # grading by the head weight alone leaves the neck turning through a
-    # 10-degree gradient over one joint's worth of geometry, which folds it --
-    # visible as a crease under the jaw.  A real head tips about the base of
-    # the neck, and so does this.
-    if abs(HEAD_TILT) > 0.01:
+    # Both are graded by the head+neck weight and pivot on the base of the
+    # neck, so the jaw, the collar and the shoulders blend instead of stepping.
+    if abs(HEAD_TILT) > 0.01 or abs(HEAD_FORWARD) > 0.01:
         hw = np.clip(np.array([d.get('Bip01 Head', 0.0) + d.get('Bip01 Neck', 0.0)
                                for d in weights_x4]), 0.0, 1.0)
         s_ = hw * hw * (3.0 - 2.0 * hw)            # smoothstep, no hard seam
@@ -349,10 +372,49 @@ def main():
         c, sn = np.cos(th), np.sin(th)
         V = np.column_stack([
             pivot[0] + rel[:, 0],
-            pivot[1] + rel[:, 1] * c - rel[:, 2] * sn,
+            pivot[1] + rel[:, 1] * c - rel[:, 2] * sn + HEAD_FORWARD * s_,
             pivot[2] + rel[:, 1] * sn + rel[:, 2] * c])
-        print('head lifted %.1f deg about Bip01 Neck (%d vertices moved)'
-              % (HEAD_TILT, int((s_ > 1e-3).sum())))
+        print('head placed: tilt %+.1f deg, forward %+.1f cm (%d vertices)'
+              % (HEAD_TILT, HEAD_FORWARD, int((s_ > 1e-3).sum())))
+
+    # ---- extra finger curl (see FINGER_CURL) -----------------------------
+    if abs(FINGER_CURL) > 0.01:
+        # every source finger segment that has an X4 joint of its own
+        # The *first* segment is left alone: it is the one whose weights blend
+        # into the palm, and rotating it shears that seam open (a visible slit
+        # across the palm).  Curling from the middle joint inwards gives the
+        # half-fist look without touching the hand's own geometry.
+        seg_joint = {}
+        for b in CORE:
+            B = CORE[b]
+            if 'Finger' in B and B in x4_bones and '_01_' not in b:
+                seg_joint[b] = B
+        th = np.radians(FINGER_CURL)
+        c, sn = np.cos(th), np.sin(th)
+        moved = 0
+        for b, B in sorted(seg_joint.items()):
+            side = side_of(b)
+            if side is None:
+                continue
+            sign = 1.0 if side == 'L' else -1.0
+            joint = np.asarray(x4_bones[B]['head'], float)
+            w = np.array([d.get(B, 0.0) for d in weights_x4])
+            w = np.clip(w, 0.0, 1.0)
+            k = w * w * (3.0 - 2.0 * w)
+            sel = k > 1e-4
+            if not sel.any():
+                continue
+            rel = V[sel] - joint
+            ang = th * k[sel] * sign
+            cc, ss = np.cos(ang), np.sin(ang)
+            # rotation about the forward axis: (x, z) -> (x cos - z sin, ...)
+            x2 = rel[:, 0] * cc - rel[:, 2] * ss
+            z2 = rel[:, 0] * ss + rel[:, 2] * cc
+            V[sel] = np.column_stack([joint[0] + x2, joint[1] + rel[:, 1],
+                                      joint[2] + z2])
+            moved += int(sel.sum())
+        print('finger curl %.1f deg/joint applied to %d finger segments '
+              '(%d vertex hits)' % (FINGER_CURL, len(seg_joint), moved))
 
     # ---- eyeball UVs into [0, 1] (see EYE_SLOTS) -------------------------
     eye_remap = {}

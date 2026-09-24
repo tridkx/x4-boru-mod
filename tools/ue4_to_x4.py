@@ -160,14 +160,21 @@ LEG_BONES = {'Bip01 L Thigh', 'Bip01 R Thigh', 'Bip01 L Calf', 'Bip01 R Calf',
              'Bip01 L Foot', 'Bip01 R Foot', 'Bip01 L Toe0', 'Bip01 R Toe0'}
 
 #: 0 = vanilla X4 stance width, 1 = the source's own (legs together).
-LEG_PULL = float(os.environ.get('BORU_LEG_PULL', '0.25'))
+LEG_PULL = float(os.environ.get('BORU_LEG_PULL', '0.45'))
 
-#: Fold the fingers onto the palm.  The source hand is authored in a T-pose
-#: with the fingers straight and slightly spread; matching each finger to its
-#: own X4 joint prises them apart (the web between them has no geometry of its
-#: own and tears).  The cost is that individual fingers no longer bend, which
-#: does not show on an NPC.
-FINGERS_BIND_TO_PALM = True
+#: Where the finger weights go.
+#:
+#: `palm` (what the previous project shipped): every finger joint's weight is
+#: merged into `Bip01 {L,R} Hand`.  The hand then keeps the *source* pose
+#: rigidly -- for a rig authored with the fingers together that is the only way
+#: to keep the web between them intact, which is why Rose and Lumine use it.
+#:
+#: `free`: the fingers keep their own joints and are retargeted like any other
+#: bone.  This source is authored in a T-pose with the fingers **straight and
+#: spread**, so letting them follow the X4 joints is what closes the hand into
+#: the relaxed half-fist every other NPC has -- and because the fingers start
+#: apart, closing them cannot tear the web (it can only make them touch).
+FINGERS_BIND_TO_PALM = os.environ.get('BORU_FINGERS', 'free') != 'free'
 
 
 def ue4_to_blender(p):

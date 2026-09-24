@@ -105,14 +105,18 @@ def setup_scene(rx, ry):
             loc).normalized().to_track_quat('Z', 'Y')
 
 
-def shoot(view, out_path, height=182.0):
-    """Orthographic shot with a camera that frames the whole 182 cm figure."""
-    ctr = mathutils.Vector((0.0, 0.0, height / 2.0))
+def shoot(view, out_path, height=182.0, centre_z=None, x_shift=None):
+    """Orthographic shot; `height` frames, `centre_z`/`x_shift` aim it."""
+    z = float(centre_z) if centre_z is not None else float(height) / 2.0
+    x = float(x_shift) if x_shift is not None else 0.0
+    height = float(height)
+    ctr = mathutils.Vector((x, 0.0, z))
     scale = height * 1.08
     loc = {
-        'front': (0.0, 400.0, height / 2.0),
-        'side': (400.0, 0.0, height / 2.0),
-        'back': (0.0, -400.0, height / 2.0),
+        'front': (x, 400.0, z),
+        'side': (400.0, x, z),
+        'back': (x, -400.0, z),
+        'hand': (x + 62.0, 48.0, z + 26.0),
     }[view]
     cam = bpy.data.cameras.new('cam')
     cam.type = 'ORTHO'
@@ -136,28 +140,39 @@ def main():
 
     # ---- vanilla --------------------------------------------------------
     reset()
-    import_xac(VANILLA_BODY)
+    part = arg('--part', 'body')
+    import_xac(VANILLA_BODY if part == 'body' else VANILLA_HEAD)
     for ob in list(bpy.data.objects):
         if ob.type == 'MESH':
             plain_material(ob, (0.62, 0.62, 0.64))
     setup_scene(rx, ry)
     for v in views:
-        shoot(v, os.path.join(paths.PREVIEW, '%s_%s_vanilla.png' % (tag, v)))
+        shoot(v, os.path.join(paths.PREVIEW, '%s_%s_vanilla.png' % (tag, v)),
+              height=arg('--height', 182.0), centre_z=arg('--centre-z'),
+              x_shift=arg('--x', None))
 
     # ---- the mod --------------------------------------------------------
     reset()
+    part = arg('--part', 'body')
     bpy.ops.wm.open_mainfile(filepath=paths.STAGE1_BLEND)
-    keep = {'skin_body', 'cloth'}
+    keep = ({'skin_body', 'cloth'} if part == 'body'
+            else ({'skin_body'} if part == 'hand'
+                  else {'skin_head', 'hair', 'eyes', 'acc', 'mouth'}))
     for ob in list(bpy.data.objects):
         if ob.type == 'MESH' and ob.name not in keep:
             bpy.data.objects.remove(ob, do_unlink=True)
     for ob in bpy.data.objects:
         if ob.type == 'MESH':
-            col = (0.80, 0.62, 0.52) if ob.name == 'skin_body' else (0.70, 0.72, 0.78)
+            col = ((0.80, 0.62, 0.52) if ob.name in ('skin_body', 'skin_head')
+                   else (0.70, 0.72, 0.78))
+            if part == 'hand':
+                col = (0.80, 0.62, 0.52)
             plain_material(ob, col)
     setup_scene(rx, ry)
     for v in views:
-        shoot(v, os.path.join(paths.PREVIEW, '%s_%s_mod.png' % (tag, v)))
+        shoot(v, os.path.join(paths.PREVIEW, '%s_%s_mod.png' % (tag, v)),
+              height=arg('--height', 182.0), centre_z=arg('--centre-z'),
+              x_shift=arg('--x', None))
 
     # ---- stitch ---------------------------------------------------------
     try:
