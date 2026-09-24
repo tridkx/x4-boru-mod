@@ -149,7 +149,7 @@ TORSO_Z_MAX = 142.0
 #: forward" -- which is the second, and the one you actually see.  So the
 #: default satisfies the second and stays put.
 HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '0.0'))
-HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '-2.0'))
+HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '-6.0'))
 #: Z window (cm, relative to `Bip01 Neck`) over which the forward slide fades
 #: in.  Below `FWD_Z0` nothing moves -- that is the neck and the collar.
 FWD_Z0 = -1.0
