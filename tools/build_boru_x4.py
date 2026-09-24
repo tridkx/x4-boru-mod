@@ -130,14 +130,26 @@ TORSO_Z_MAX = 142.0
 #: while the jaw, being next to the pivot, hardly moves.  Two rounds of "it
 #: still looks tilted" were this knob being turned the wrong way.  Default 0.
 #:
-#: **`HEAD_FORWARD`** slides the *head* forward along the chest, and only the
-#: head: the window is measured in Z above the neck joint, fading out before it
-#: reaches the neck itself.  Grading it by the head+neck weight instead (the
-#: first attempt) moves the top of the neck more than the bottom, which tilts
-#: the neck forward -- exactly the symptom it was meant to cure.  The face sits
-#: ~3 cm behind the vanilla one at the same heights; the neck does not.
+#: **`HEAD_FORWARD`** slides the head forward along the chest (positive = the
+#: head ends up in front of the chest).  **Default 0, and it should stay
+#: there.**
+#:
+#: There are two ways to measure where the head is, and on this pair of rigs
+#: they disagree:
+#:
+#: * *relative to the head bone* -- the eyeball sits 9.48 cm forward of it on
+#:   the vanilla head and only 6.97 cm on ours, so this metric wants the head
+#:   pushed ~2.5 cm forward;
+#: * *relative to the chest* -- the vanilla head geometry sits 4.22 cm in
+#:   front of the chest centre, ours 1.17 cm, so this one wants it left alone.
+#:
+#: The disagreement is structural: the source puts its head bone lower in the
+#: skull than X4 does, and no rigid move fixes both.  Pushing the head forward
+#: to satisfy the first makes it sit in front of the chest -- "the neck leans
+#: forward" -- which is the second, and the one you actually see.  So the
+#: default satisfies the second and stays put.
 HEAD_TILT = float(os.environ.get('BORU_HEAD_TILT', '0.0'))
-HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '2.2'))
+HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD', '0.0'))
 #: Z window (cm, relative to `Bip01 Neck`) over which the forward slide fades
 #: in.  Below `FWD_Z0` nothing moves -- that is the neck and the collar.
 FWD_Z0 = -1.0
@@ -173,6 +185,13 @@ NECK_TILT = float(os.environ.get('BORU_NECK_TILT', '0.0'))
 #:   -- which is what "only the tip bends" was.  The share applied at joint `j`
 #:   is therefore the vertex's weight on segment `j` *and everything beyond it*.
 FINGER_CURL = float(os.environ.get('BORU_FINGER_CURL', '20.0'))
+
+#: Per-finger share of `FINGER_CURL`.  A thumb is not a finger: it curls far
+#: less in a relaxed hand (and its chain is rotated ~90 degrees out of the
+#: others' plane, so an equal angle reads as it folding across the palm).
+FINGER_CURL_SCALE = {
+    'thumb': 0.35, 'index': 1.0, 'middle': 1.0, 'ring': 0.9, 'pinky': 0.8,
+}
 
 #: the X4 finger chains, root first (thumb is Finger0 on this rig)
 FINGER_CHAINS = {
@@ -427,11 +446,11 @@ def main():
 
     # ---- extra finger curl (see FINGER_CURL) -----------------------------
     if abs(FINGER_CURL) > 0.01:
-        th = np.radians(FINGER_CURL)
         hand_of = {'L': 'Bip01 L Hand', 'R': 'Bip01 R Hand'}
         total = 0
         for side in ('L', 'R'):
             for fname, chain in sorted(FINGER_CHAINS.items()):
+                th = np.radians(FINGER_CURL) * FINGER_CURL_SCALE.get(fname, 1.0)
                 bones = ['Bip01 %s %s' % (side, b) for b in chain]
                 if not all(b in x4_bones for b in bones):
                     continue
@@ -497,8 +516,9 @@ def main():
                         pivots[m] = piv + Rk @ (pivots[m] - piv)
                 V[idx] = pts
                 total += len(idx)
-        print('finger curl %.1f deg/joint, per-finger axis, cumulative, '
-              'root-first (%d vertex hits)' % (FINGER_CURL, total))
+        print('finger curl %.1f deg/joint (thumb %.0f%%), per-finger axis, '
+              'cumulative, root-first (%d vertex hits)'
+              % (FINGER_CURL, FINGER_CURL_SCALE['thumb'] * 100, total))
 
     # ---- eyeball UVs into [0, 1] (see EYE_SLOTS) -------------------------
     eye_remap = {}
