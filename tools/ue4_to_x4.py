@@ -176,9 +176,17 @@ LEG_PULL = float(os.environ.get(
 #: spread**, so letting them follow the X4 joints is what closes the hand into
 #: the relaxed half-fist every other NPC has -- and because the fingers start
 #: apart, closing them cannot tear the web (it can only make them touch).
-FINGERS_BIND_TO_PALM = os.environ.get(
-    'BORU_FINGERS',
-    'palm' if os.environ.get('BORU_BASELINE', '0') == '1' else 'free') != 'free'
+#: **Always `palm`.**  `free` (let the fingers keep their own joints and
+#: retarget like any other bone) crashes the game when the mesh loads: the
+#: retarget gives those joints 111-119 degrees of rotation and 63-68 cm of
+#: translation, because the source is a T-pose with the fingers spread and X4
+#: hangs them closed, and the engine does not survive being handed a mesh
+#: whose vertices ride transforms that large (`0xC0000005`, execute at `0x0`).
+#: Bisected: everything else off + `free` = crash; everything else off = loads.
+#: The half-fist is produced geometrically instead -- see `FINGER_CURL` in
+#: `build_boru_x4.py`, which curls the geometry while the weights stay on the
+#: palm exactly as they are in the version that loads.
+FINGERS_BIND_TO_PALM = True
 
 
 def ue4_to_blender(p):

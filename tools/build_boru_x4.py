@@ -224,6 +224,17 @@ FINGER_CURL_SCALE = {
     'thumb': 0.35, 'index': 1.0, 'middle': 1.0, 'ring': 0.9, 'pinky': 0.8,
 }
 
+#: source bone name -> (finger, side, segment index).  The curl cannot read
+#: this from the X4-space weights any more: those have the finger weights
+#: merged into the palm (see `ue4_to_x4.FINGERS_BIND_TO_PALM`), so the source
+#: weights -- which still say which phalanx each vertex belongs to -- are what
+#: decides how much of the curl a vertex takes.
+_FINGER_SEG = {}
+for _s, _S in (('l', 'L'), ('r', 'R')):
+    for _f in ('thumb', 'index', 'middle', 'ring', 'pinky'):
+        for _k in range(3):
+            _FINGER_SEG['%s_%02d_%s' % (_f, _k + 1, _s)] = (_f, _S, _k)
+
 #: the X4 finger chains, root first (thumb is Finger0 on this rig)
 FINGER_CHAINS = {
     'thumb': ('Finger0', 'Finger01', 'Finger02'),
@@ -479,6 +490,20 @@ def main():
               % (HEAD_TILT, HEAD_FORWARD, pivot[2] + FWD_Z0, pivot[2] + FWD_Z1,
                  FWD_RMAX, FWD_RMAX + FWD_RFADE, int((fwd > 1e-3).sum())))
 
+    # ---- who belongs to which phalanx (from the source weights) ----------
+    src_finger_w = {}
+    for i, d in enumerate(mesh.weights):
+        for bid, w in d.items():
+            seg = _FINGER_SEG.get(src_names[bid]) if bid < len(src_names) else None
+            if seg is None:
+                continue
+            fname, side, k = seg
+            arr = src_finger_w.get((fname, side))
+            if arr is None:
+                arr = np.zeros((len(V), 3))
+                src_finger_w[(fname, side)] = arr
+            arr[i, k] += w
+
     # ---- extra finger curl (see FINGER_CURL) -----------------------------
     if abs(FINGER_CURL) > 0.01:
         hand_of = {'L': 'Bip01 L Hand', 'R': 'Bip01 R Hand'}
@@ -516,8 +541,12 @@ def main():
                     if best_d is None or d < best_d:
                         sign, best_d = cand, d
 
-                wseg = [np.array([dd.get(b, 0.0) for dd in weights_x4])
-                        for b in bones]
+                # membership from the *source* weights (see _FINGER_SEG)
+                key = (fname, side)
+                w3 = src_finger_w.get(key)
+                if w3 is None:
+                    continue
+                wseg = [w3[:, k] for k in range(n)]
                 sel = np.sum(wseg, axis=0) > 1e-4
                 if not sel.any():
                     continue
