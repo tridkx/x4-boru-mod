@@ -164,34 +164,6 @@ LEG_PULL = float(os.environ.get(
     'BORU_LEG_PULL',
     '0.0' if os.environ.get('BORU_BASELINE', '0') == '1' else '0.65'))
 
-#: ...and how much of that pull each leg bone takes.
-#:
-#: Pulling the whole leg in uniformly narrows the *stance* as well as the
-#: thighs, and the walk cycle is authored against vanilla's stance width: the
-#: legs then swing through each other and the NPC walks a catwalk line.  The
-#: feet therefore keep the rig's own width (pull 0) while the thigh and calf
-#: take the pull, which is what makes the silhouette slimmer without touching
-#: how the character stands.  (Measured: with a uniform 0.65 the feet sat at
-#: +-15.2 cm where vanilla's sneakers are +-28.5.)
-#: ...and the feet take a **negative** pull: they are pushed back out past
-#: vanilla's own stance.  Pulling the thigh and calf in moves the whole leg
-#: inward, and the run cycle is authored against vanilla's stance, so the feet
-#: end up closer together than the rig intends -- visible as feet passing too
-#: near each other when running.  Compensating at the feet is what keeps the
-#: slimmer silhouette and the original stride width at the same time.
-LEG_PULL_SHAPE = {
-    'Thigh': 1.0, 'Calf': 0.6, 'Foot': -0.8, 'Toe0': -0.8,
-}
-
-#: How much of the foot's own rotation to keep.  0 = the source's flat foot
-#: (which is what `NO_ROTATE_BONES` was for), 1 = fully aligned to the X4 foot.
-#:
-#: Neither extreme works on its own: at 0 the calf is rotated to X4's angle
-#: while the foot stays flat, and the ankle visibly breaks -- the shin leans
-#: and the foot stays upright.  Half of it keeps the sole near flat and lets
-#: the foot follow the shin.
-FOOT_ROTATE_SHARE = float(os.environ.get('BORU_FOOT_ROT', '0.5'))
-
 #: Where the finger weights go.
 #:
 #: `palm` (what the previous project shipped): every finger joint's weight is
@@ -281,10 +253,6 @@ class Ue4Adapter:
     def side_of(self, name):
         return side_of(name)
 
-    #: read by `retarget_core._build_direct` for the bones in
-    #: `no_rotate_bones`
-    no_rotate_share = FOOT_ROTATE_SHARE
-
     def adjust_target(self, x4_bone, src_pos, dst_pos):
         """Final say on where a target bone's translation lands.
 
@@ -312,12 +280,9 @@ class Ue4Adapter:
         knob and not a constant.
         """
         if x4_bone in LEG_BONES and LEG_PULL > 0.0:
-            part = x4_bone.rsplit(' ', 1)[-1]
-            share = LEG_PULL_SHAPE.get(part, 1.0)
-            if abs(share) > 1e-6:          # negative = push outwards
-                out = np.array(dst_pos, float)
-                out[0] = dst_pos[0] + (src_pos[0] - dst_pos[0]) * LEG_PULL * share
-                return out
+            out = np.array(dst_pos, float)
+            out[0] = dst_pos[0] + (src_pos[0] - dst_pos[0]) * LEG_PULL
+            return out
         return dst_pos
 
 

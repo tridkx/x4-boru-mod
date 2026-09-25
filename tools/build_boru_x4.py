@@ -180,20 +180,8 @@ HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD',
 #: spine / clavicle weight, so they get slightly different offsets, and a
 #: couple of millimetres of that across a neck reads as folds.  Height and
 #: distance from the midline are continuous, so the result is.
-#: The window sits **entirely below the neck and the collar** (z-24 .. z-13,
-#: i.e. inside the chest).  Everything above it -- neck, collar, head -- then
-#: moves as one rigid piece, which is the only way their relationships survive.
-#:
-#: Both earlier attempts put the top of the ramp *inside* the neck or the jaw
-#: and sheared whatever straddled it:
-#:   * top at z+6: the collar's lower edge moved 0.3 cm while the neck 3 cm
-#:     above it moved 3 cm -- a visible gap between neck and shirt;
-#:   * top at z+4: the jaw moved 3.5 cm while the top of the skull moved the
-#:     full 4 cm -- she read as permanently looking up.
-#: A ramp can only be placed where nothing structural spans it, and the chest
-#: is the first such place above the waist.
-FWD_Z0 = -24.0
-FWD_Z1 = -13.0
+FWD_Z0 = -8.0
+FWD_Z1 = 6.0
 FWD_RMAX = 20.0        # full slide inside this half-width (cm)
 FWD_RFADE = 7.0        # faded out over this much more, so nothing shears
 

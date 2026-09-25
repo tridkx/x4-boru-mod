@@ -124,25 +124,6 @@ def min_rotation(a, b):
     return np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
 
 
-def partial_rotation(a, b, share):
-    """A fraction of the shortest-arc rotation from `a` onto `b` (axis-angle)."""
-    R = min_rotation(a, b)
-    c = (np.trace(R) - 1.0) / 2.0
-    ang = float(np.arccos(max(-1.0, min(1.0, c))))
-    if ang < 1e-9:
-        return np.eye(3)
-    axis = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
-    n = float(np.linalg.norm(axis))
-    if n < 1e-9:
-        return np.eye(3)
-    axis = axis / n
-    k = np.array([[0.0, -axis[2], axis[1]],
-                  [axis[2], 0.0, -axis[0]],
-                  [-axis[1], axis[0], 0.0]])
-    a2 = ang * share
-    return np.eye(3) + np.sin(a2) * k + (1.0 - np.cos(a2)) * (k @ k)
-
-
 class BindPoseRetarget:
     """Builds the per-bone transforms, then applies them to vertices."""
 
@@ -302,15 +283,8 @@ class BindPoseRetarget:
             q = np.asarray(self.x4[B]['head'], float)
             q = np.asarray(self.adapter.adjust_target(B, self.src[b], q), float)
             u, v = self._pair_axis(b, B)
-            share = getattr(self.adapter, 'no_rotate_share', 0.0)
             if B in self.adapter.no_rotate_bones:
-                # a share of 0 keeps the authored foot attitude; 1 would align
-                # it fully.  In between keeps the sole flat *and* the ankle
-                # continuous with the rotated calf.
-                if share > 0.0 and u is not None and v is not None:
-                    self.direct[b] = (self.src[b], q, partial_rotation(u, v, share))
-                else:
-                    self.direct[b] = (self.src[b], q, np.eye(3))
+                self.direct[b] = (self.src[b], q, np.eye(3))
                 continue
             if u is None or v is None:
                 # no anatomical direction available (pelvis, which coincides
