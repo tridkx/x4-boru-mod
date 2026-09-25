@@ -164,6 +164,19 @@ LEG_PULL = float(os.environ.get(
     'BORU_LEG_PULL',
     '0.0' if os.environ.get('BORU_BASELINE', '0') == '1' else '0.65'))
 
+#: ...and how much of that pull each leg bone takes.
+#:
+#: Pulling the whole leg in uniformly narrows the *stance* as well as the
+#: thighs, and the walk cycle is authored against vanilla's stance width: the
+#: legs then swing through each other and the NPC walks a catwalk line.  The
+#: feet therefore keep the rig's own width (pull 0) while the thigh and calf
+#: take the pull, which is what makes the silhouette slimmer without touching
+#: how the character stands.  (Measured: with a uniform 0.65 the feet sat at
+#: +-15.2 cm where vanilla's sneakers are +-28.5.)
+LEG_PULL_SHAPE = {
+    'Thigh': 1.0, 'Calf': 0.6, 'Foot': 0.0, 'Toe0': 0.0,
+}
+
 #: Where the finger weights go.
 #:
 #: `palm` (what the previous project shipped): every finger joint's weight is
@@ -280,9 +293,12 @@ class Ue4Adapter:
         knob and not a constant.
         """
         if x4_bone in LEG_BONES and LEG_PULL > 0.0:
-            out = np.array(dst_pos, float)
-            out[0] = dst_pos[0] + (src_pos[0] - dst_pos[0]) * LEG_PULL
-            return out
+            part = x4_bone.rsplit(' ', 1)[-1]
+            share = LEG_PULL_SHAPE.get(part, 1.0)
+            if share > 0.0:
+                out = np.array(dst_pos, float)
+                out[0] = dst_pos[0] + (src_pos[0] - dst_pos[0]) * LEG_PULL * share
+                return out
         return dst_pos
 
 

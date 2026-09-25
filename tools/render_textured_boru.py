@@ -126,6 +126,9 @@ def main():
         'upper': ((ctr.x, ctr.y + 130, 140), (ctr.x, ctr.y, 140), 90),
         'side': ((ctr.x + scale * 2.0, ctr.y, ctr.z), ctr, scale),
         'sidehead': ((ctr.x + 40, ctr.y, 163.0), (ctr.x, ctr.y, 163.0), 34),
+        # collar / neck seam, the region the head slide can open up
+        'neck': ((ctr.x + 46, ctr.y + 30, 155.0), (ctr.x, ctr.y, 155.0), 30),
+        'neck34': ((ctr.x + 30, ctr.y + 40, 157.0), (ctr.x, ctr.y, 155.0), 34),
         # only the eyes: 168 cm is the vanilla eye height, +-3.4 cm apart
         # left hand: X4's Bip01 L Hand hangs at (+43, +7, 98); ours follows
         'hand': ((ctr.x + 62, ctr.y + 42, 99.0), (ctr.x + 43, ctr.y, 97.0), 26),

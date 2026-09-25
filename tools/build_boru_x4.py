@@ -180,8 +180,14 @@ HEAD_FORWARD = float(os.environ.get('BORU_HEAD_FWD',
 #: spine / clavicle weight, so they get slightly different offsets, and a
 #: couple of millimetres of that across a neck reads as folds.  Height and
 #: distance from the midline are continuous, so the result is.
-FWD_Z0 = -8.0
-FWD_Z1 = 6.0
+#: The window has to reach *below the collar*, not just below the neck: with
+#: its foot at z-8 the collar's lower edge (z-6) moved 0.3 cm while the neck
+#: three centimetres above it moved 3 cm, and the two were pulled apart into a
+#: visible gap between neck and shirt.  Starting the ramp at z-15 lets the
+#: whole collar ride along, and the gradient over 18 cm is gentle enough that
+#: it disappears into the chest.
+FWD_Z0 = -15.0
+FWD_Z1 = 4.0
 FWD_RMAX = 20.0        # full slide inside this half-width (cm)
 FWD_RFADE = 7.0        # faded out over this much more, so nothing shears
 
