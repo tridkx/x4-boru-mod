@@ -214,8 +214,13 @@ NECK_TILT = float(os.environ.get('BORU_NECK_TILT', '0.0'))
 #:   ride every joint above it, or the finger comes apart at the middle knuckle
 #:   -- which is what "only the tip bends" was.  The share applied at joint `j`
 #:   is therefore the vertex's weight on segment `j` *and everything beyond it*.
+#: Default 0 -- no curl.  The hand keeps the source's own flat, open pose.
+#: (A half-fist was built geometrically at 20 deg/joint and looked wrong at
+#: NPC distance, so it is off; the code stays in case a later character wants
+#: it.  Note it can only ever be *geometry*: driving the fingers from their own
+#: joints crashes the loader, see ue4_to_x4.FINGERS_BIND_TO_PALM.)
 FINGER_CURL = float(os.environ.get('BORU_FINGER_CURL',
-                                   '0.0' if BASELINE else '20.0'))
+                                   '0.0'))
 
 #: Per-finger share of `FINGER_CURL`.  A thumb is not a finger: it curls far
 #: less in a relaxed hand (and its chain is rotated ~90 degrees out of the
